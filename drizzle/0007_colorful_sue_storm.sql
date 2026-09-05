@@ -1,0 +1,2 @@
+CREATE INDEX "assignment_submissions_graded_idx" ON "assignment_submissions" USING btree ("graded_at");--> statement-breakpoint
+CREATE INDEX "assignment_submissions_submitted_idx" ON "assignment_submissions" USING btree ("submitted_at");

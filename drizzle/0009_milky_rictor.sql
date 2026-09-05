@@ -1,0 +1,1 @@
+ALTER TYPE "public"."assignment_type" ADD VALUE 'campuran';

@@ -1,0 +1,1 @@
+CREATE INDEX "schedules_class_day_idx" ON "schedules" USING btree ("class_id","day_of_week");

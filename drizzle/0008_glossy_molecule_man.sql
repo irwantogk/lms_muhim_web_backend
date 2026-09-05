@@ -1,0 +1,1 @@
+CREATE INDEX "assignment_submissions_pending_idx" ON "assignment_submissions" USING btree ("assignment_id") WHERE "assignment_submissions"."graded_at" is null;
