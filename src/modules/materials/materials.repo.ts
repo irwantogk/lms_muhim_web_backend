@@ -4,6 +4,7 @@ import {
   classes,
   classStudents,
   classSubjectTeacher,
+  materialComments,
   materials,
   parentStudents,
   subjects,
@@ -21,14 +22,27 @@ export interface MaterialRow {
   id: string;
   className: string;
   classId: string;
+  subjectId?: string;
   subjectCode: string;
   subjectName: string;
   teacherName: string;
+  teacherId?: string;
   title: string;
   description: string | null;
   content: string | null;
   fileUrl: string;
   type: MaterialKind;
+  createdAt: Date;
+}
+
+export interface MaterialCommentRow {
+  id: string;
+  materialId: string;
+  authorId: string;
+  authorName: string;
+  authorRole: "admin" | "guru" | "murid" | "orang_tua";
+  body: string;
+  isHidden: boolean;
   createdAt: Date;
 }
 
@@ -50,6 +64,15 @@ export interface MaterialsStore {
   parentClasses(parentId: string): Promise<ClassOption[]>;
   allClasses(): Promise<ClassOption[]>;
   materialById(id: string): Promise<MaterialRow | null>;
+  commentsByMaterial(materialId: string): Promise<MaterialCommentRow[]>;
+  insertComment(input: {
+    materialId: string;
+    authorId: string;
+    body: string;
+  }): Promise<MaterialCommentRow>;
+  commentById(id: string): Promise<MaterialCommentRow | null>;
+  setCommentHidden(id: string, hidden: boolean): Promise<boolean>;
+  deleteComment(id: string): Promise<boolean>;
   listFiltered(query: {
     classIds: string[];
     subjectId?: string;
@@ -123,6 +146,7 @@ export function createMaterialsStore(db: Database): MaterialsStore {
           id: materials.id,
           className: classes.name,
           classId: materials.classId,
+          subjectId: materials.subjectId,
           subjectCode: subjects.code,
           subjectName: subjects.name,
           teacherName: users.fullName,
@@ -144,6 +168,7 @@ export function createMaterialsStore(db: Database): MaterialsStore {
         id: row.id,
         className: row.className,
         classId: row.classId,
+        subjectId: row.subjectId,
         subjectCode: row.subjectCode,
         subjectName: row.subjectName,
         teacherName: row.teacherName,
@@ -154,6 +179,69 @@ export function createMaterialsStore(db: Database): MaterialsStore {
         type: row.type,
         createdAt: new Date(row.createdAt),
       };
+    },
+
+    async commentsByMaterial(materialId) {
+      return db
+        .select({
+          id: materialComments.id,
+          materialId: materialComments.materialId,
+          authorId: materialComments.authorId,
+          authorName: users.fullName,
+          authorRole: users.role,
+          body: materialComments.body,
+          isHidden: materialComments.isHidden,
+          createdAt: materialComments.createdAt,
+        })
+        .from(materialComments)
+        .innerJoin(users, eq(materialComments.authorId, users.id))
+        .where(eq(materialComments.materialId, materialId))
+        .orderBy(desc(materialComments.createdAt));
+    },
+
+    async insertComment(input) {
+      const [row] = await db
+        .insert(materialComments)
+        .values(input)
+        .returning({ id: materialComments.id });
+      if (!row) throw new Error("Gagal menyimpan komentar");
+      return (await this.commentById(row.id))!;
+    },
+
+    async commentById(id) {
+      const [row] = await db
+        .select({
+          id: materialComments.id,
+          materialId: materialComments.materialId,
+          authorId: materialComments.authorId,
+          authorName: users.fullName,
+          authorRole: users.role,
+          body: materialComments.body,
+          isHidden: materialComments.isHidden,
+          createdAt: materialComments.createdAt,
+        })
+        .from(materialComments)
+        .innerJoin(users, eq(materialComments.authorId, users.id))
+        .where(eq(materialComments.id, id))
+        .limit(1);
+      return row ?? null;
+    },
+
+    async setCommentHidden(id, hidden) {
+      const result = await db
+        .update(materialComments)
+        .set({ isHidden: hidden })
+        .where(eq(materialComments.id, id))
+        .returning({ id: materialComments.id });
+      return result.length > 0;
+    },
+
+    async deleteComment(id) {
+      const result = await db
+        .delete(materialComments)
+        .where(eq(materialComments.id, id))
+        .returning({ id: materialComments.id });
+      return result.length > 0;
     },
 
     async listFiltered(filter) {

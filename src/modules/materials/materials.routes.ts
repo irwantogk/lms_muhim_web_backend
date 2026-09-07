@@ -6,11 +6,16 @@ import { createMaterialsStore } from "./materials.repo.ts";
 import { createMaterialsService } from "./materials.service.ts";
 import { fetchObject, presignPutUpload } from "../../utils/s3.ts";
 import {
+  commentBodySchema,
   createContentBodySchema,
   createMaterialBodySchema,
+  hiddenBodySchema,
   listMaterialsQuerySchema,
   materialByIdParamsSchema,
+  materialCommentsParamsSchema,
   presignUploadBodySchema,
+  successCommentSchema,
+  successCommentsSchema,
   successCreateContentSchema,
   successCreateMaterialSchema,
   successListMaterialsSchema,
@@ -252,6 +257,116 @@ export const materialsModule = new Elysia({ prefix: "/materials" })
           "403": { description: "Tidak berhak / materi tidak ditemukan" },
           "500": { description: "Kesalahan server" },
         },
+      },
+    },
+  )
+  .get(
+    "/:id/comments",
+    async ({ params, authUser }) => {
+      const data = await materialsService.listMaterialComments({
+        role: authUser!.role,
+        userId: authUser!.id,
+        id: params.id,
+      });
+      return { success: true as const, data };
+    },
+    {
+      beforeHandle: roleGuard(["guru", "murid"]),
+      params: materialByIdParamsSchema,
+      response: {
+        200: successCommentsSchema,
+        401: errorSchema,
+        403: errorSchema,
+        404: errorSchema,
+      },
+      detail: {
+        summary: "Komentar materi (RBAC: guru & murid)",
+        description:
+          "Daftar komentar pada sebuah materi. Murid hanya melihat komentar aktif; guru melihat " +
+          "semua (termasuk yang disembunyikan) beserta flag `canModerate`.",
+        tags: ["Materials"],
+      },
+    },
+  )
+  .post(
+    "/:id/comments",
+    async ({ params, body, authUser }) => {
+      const data = await materialsService.addMaterialComment({
+        role: authUser!.role,
+        userId: authUser!.id,
+        id: params.id,
+        body: body.body,
+      });
+      return { success: true as const, data };
+    },
+    {
+      beforeHandle: roleGuard(["guru", "murid"]),
+      params: materialByIdParamsSchema,
+      body: commentBodySchema,
+      response: {
+        200: successCommentSchema,
+        400: errorSchema,
+        401: errorSchema,
+        403: errorSchema,
+        404: errorSchema,
+      },
+      detail: {
+        summary: "Tambah komentar materi (RBAC: guru & murid)",
+        description:
+          "Murid atau guru di kelas materi dapat memberi komentar (3–2000 karakter).",
+        tags: ["Materials"],
+      },
+    },
+  )
+  .post(
+    "/:id/comments/:commentId/hidden",
+    async ({ params, body, authUser }) => {
+      const data = await materialsService.setMaterialCommentHidden({
+        userId: authUser!.id,
+        id: params.id,
+        commentId: params.commentId,
+        hidden: body.hidden,
+      });
+      return { success: true as const, data };
+    },
+    {
+      beforeHandle: roleGuard(["guru"]),
+      params: materialCommentsParamsSchema,
+      body: hiddenBodySchema,
+      response: {
+        200: successCommentSchema,
+        400: errorSchema,
+        401: errorSchema,
+        403: errorSchema,
+        404: errorSchema,
+      },
+      detail: {
+        summary: "Sembunyikan/tampilkan komentar (RBAC: guru pengampu)",
+        description:
+          "Hanya guru pengampu kelas & mapel materi atau pembuat materi yang dapat " +
+          "menyembunyikan/menampilkan komentar.",
+        tags: ["Materials"],
+      },
+    },
+  )
+  .delete(
+    "/:id/comments/:commentId",
+    async ({ params, authUser }) => {
+      await materialsService.deleteMaterialComment({
+        userId: authUser!.id,
+        id: params.id,
+        commentId: params.commentId,
+      });
+      return { success: true as const, data: { ok: true as const } };
+    },
+    {
+      beforeHandle: roleGuard(["guru"]),
+      params: materialCommentsParamsSchema,
+      detail: {
+        summary: "Hapus komentar materi (RBAC: guru pengampu)",
+        description:
+          "Menghapus komentar dari sebuah materi oleh guru pengampu atau pembuat materi.",
+        tags: ["Materials"],
       },
     },
   );

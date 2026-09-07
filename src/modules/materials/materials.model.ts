@@ -118,3 +118,51 @@ export const successListMaterialsSchema = t.Object({
 
 export type MaterialItem = Static<typeof materialItemSchema>;
 export type PresignResult = Static<typeof presignResultSchema>;
+
+// ---------------------------------------------------------------------------
+// Komentar materi
+// ---------------------------------------------------------------------------
+const materialRoleSchema = t.Union([
+  t.Literal("admin"),
+  t.Literal("guru"),
+  t.Literal("murid"),
+  t.Literal("orang_tua"),
+]);
+
+export const materialCommentItemSchema = t.Object({
+  id: t.String(),
+  authorId: t.String(),
+  authorName: t.String(),
+  authorRole: materialRoleSchema,
+  body: t.String(),
+  isHidden: t.Boolean(),
+  createdAt: t.String(),
+});
+
+export const materialCommentsParamsSchema = t.Object({
+  id: t.String({ pattern: uuidPattern }),
+  commentId: t.String({ pattern: uuidPattern }),
+});
+
+export const commentBodySchema = t.Object({
+  body: t.String({ minLength: 3, maxLength: 2000 }),
+});
+
+export const hiddenBodySchema = t.Object({
+  hidden: t.Boolean(),
+});
+
+export const successCommentsSchema = t.Object({
+  success: t.Literal(true),
+  data: t.Object({
+    canModerate: t.Boolean(),
+    comments: t.Array(materialCommentItemSchema),
+  }),
+});
+
+export const successCommentSchema = t.Object({
+  success: t.Literal(true),
+  data: materialCommentItemSchema,
+});
+
+export type MaterialCommentItem = Static<typeof materialCommentItemSchema>;
