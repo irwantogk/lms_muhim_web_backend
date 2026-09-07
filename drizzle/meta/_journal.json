@@ -92,6 +92,13 @@
       "when": 1788600774492,
       "tag": "0012_magenta_human_fly",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788674550615,
+      "tag": "0013_bumpy_firestar",
+      "breakpoints": true
     }
   ]
 }

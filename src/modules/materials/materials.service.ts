@@ -1,5 +1,9 @@
 import type { Role } from "../../common/types.ts";
-import { ForbiddenError, ValidationError } from "../../utils/errors.ts";
+import {
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from "../../utils/errors.ts";
 import { kindOf, validateFile } from "../../utils/storage.ts";
 import type { PresignResult, MaterialItem } from "./materials.model.ts";
 import type {
@@ -44,6 +48,16 @@ export interface MaterialListOptions {
   q?: string;
 }
 
+export interface MaterialCommentItem {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorRole: Role;
+  body: string;
+  isHidden: boolean;
+  createdAt: string;
+}
+
 export interface MaterialsService {
   prepareUpload(options: PrepareUploadOptions): Promise<PresignResult>;
   confirmMaterial(options: ConfirmMaterialOptions): Promise<MaterialItem>;
@@ -54,6 +68,28 @@ export interface MaterialsService {
     currentClassId: string | null;
     materials: MaterialItem[];
   }>;
+  listMaterialComments(options: {
+    role: Role;
+    userId: string;
+    id: string;
+  }): Promise<{ canModerate: boolean; comments: MaterialCommentItem[] }>;
+  addMaterialComment(options: {
+    role: Role;
+    userId: string;
+    id: string;
+    body: string;
+  }): Promise<MaterialCommentItem>;
+  setMaterialCommentHidden(options: {
+    userId: string;
+    id: string;
+    commentId: string;
+    hidden: boolean;
+  }): Promise<MaterialCommentItem>;
+  deleteMaterialComment(options: {
+    userId: string;
+    id: string;
+    commentId: string;
+  }): Promise<void>;
 }
 
 export interface CreateContentOptions {
@@ -135,6 +171,47 @@ export function createMaterialsService(deps: MaterialsServiceDeps): MaterialsSer
         return repo.parentClasses(userId);
       case "admin":
         return repo.allClasses();
+    }
+  }
+
+  function toComment(row: {
+    id: string;
+    authorId: string;
+    authorName: string;
+    authorRole: Role;
+    body: string;
+    isHidden: boolean;
+    createdAt: Date;
+  }): MaterialCommentItem {
+    return {
+      id: row.id,
+      authorId: row.authorId,
+      authorName: row.authorName,
+      authorRole: row.authorRole,
+      body: row.body,
+      isHidden: row.isHidden,
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
+
+  async function loadAccessibleMaterial(
+    role: Role,
+    userId: string,
+    id: string,
+  ) {
+    const row = await repo.materialById(id);
+    if (!row) throw new NotFoundError("Materi tidak ditemukan");
+    const classes = await classesForRole(role, userId);
+    if (!classes.some((c) => c.id === row.classId)) {
+      throw new ForbiddenError("Anda tidak memiliki akses ke materi ini");
+    }
+    return row;
+  }
+
+  async function assertCanModerate(row: MaterialRow, userId: string) {
+    const teaches = await repo.teaches(row.classId, row.subjectId!, userId);
+    if (!teaches && row.teacherId !== userId) {
+      throw new ForbiddenError("Hanya guru pengampu yang dapat memoderasi komentar");
     }
   }
 
@@ -226,6 +303,59 @@ export function createMaterialsService(deps: MaterialsServiceDeps): MaterialsSer
         throw new ForbiddenError("Anda tidak memiliki akses ke materi ini");
       }
       return toItem(row);
+    },
+
+    async listMaterialComments({ role, userId, id }) {
+      const row = await loadAccessibleMaterial(role, userId, id);
+      const canModerate = role === "guru" &&
+        (await (async () => {
+          const teaches = await repo.teaches(row.classId, row.subjectId!, userId);
+          return teaches || row.teacherId === userId;
+        })());
+      const rows = await repo.commentsByMaterial(id);
+      const comments = (role === "guru" ? rows : rows.filter((r) => !r.isHidden))
+        .map(toComment);
+      return { canModerate, comments };
+    },
+
+    async addMaterialComment({ role, userId, id, body }) {
+      const text = body.trim();
+      if (text.length < 3 || text.length > 2000) {
+        throw new ValidationError("Komentar harus 3–2000 karakter");
+      }
+      if (role !== "murid" && role !== "guru") {
+        throw new ForbiddenError("Peran Anda tidak dapat berkomentar di materi");
+      }
+      await loadAccessibleMaterial(role, userId, id);
+      const created = await repo.insertComment({
+        materialId: id,
+        authorId: userId,
+        body: text,
+      });
+      return toComment(created);
+    },
+
+    async setMaterialCommentHidden({ userId, id, commentId, hidden }) {
+      const row = await loadAccessibleMaterial("guru", userId, id);
+      await assertCanModerate(row, userId);
+      const comment = await repo.commentById(commentId);
+      if (!comment || comment.materialId !== id) {
+        throw new NotFoundError("Komentar tidak ditemukan");
+      }
+      const ok = await repo.setCommentHidden(commentId, hidden);
+      if (!ok) throw new NotFoundError("Komentar tidak ditemukan");
+      return toComment({ ...comment, isHidden: hidden });
+    },
+
+    async deleteMaterialComment({ userId, id, commentId }) {
+      const row = await loadAccessibleMaterial("guru", userId, id);
+      await assertCanModerate(row, userId);
+      const comment = await repo.commentById(commentId);
+      if (!comment || comment.materialId !== id) {
+        throw new NotFoundError("Komentar tidak ditemukan");
+      }
+      const ok = await repo.deleteComment(commentId);
+      if (!ok) throw new NotFoundError("Komentar tidak ditemukan");
     },
 
     async listMaterials(options) {

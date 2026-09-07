@@ -374,6 +374,30 @@ export const materials = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// material_comments  (komentar murid/guru pada materi; dimoderasi guru)
+// ---------------------------------------------------------------------------
+export const materialComments = pgTable(
+  "material_comments",
+  {
+    id: uuidPk,
+    materialId: uuid("material_id")
+      .notNull()
+      .references(() => materials.id, { onDelete: "cascade", onUpdate: "cascade" }),
+    authorId: uuid("author_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade", onUpdate: "cascade" }),
+    body: text("body").notNull(),
+    isHidden: boolean("is_hidden").notNull().default(false),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("material_comments_material_idx").on(table.materialId),
+    index("material_comments_author_idx").on(table.authorId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // forum_topics  (diskusi per kelas/mata pelajaran)
 // ---------------------------------------------------------------------------
 export const forumTopics = pgTable(

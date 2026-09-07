@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { ForbiddenError, ValidationError } from "../../../utils/errors.ts";
 import type {
   ClassOption,
+  MaterialCommentRow,
   InsertMaterialInput,
   MaterialsStore,
   MaterialRow,
@@ -51,6 +52,23 @@ class FakeStore implements MaterialsStore {
   async insertMaterial(input: InsertMaterialInput) {
     this.saved = input;
     return { id: "mat-1" };
+  }
+  async commentsByMaterial() {
+    return [];
+  }
+  async insertComment(
+    _input: { materialId: string; authorId: string; body: string },
+  ): Promise<MaterialCommentRow> {
+    throw new Error("not used");
+  }
+  async commentById() {
+    return null;
+  }
+  async setCommentHidden() {
+    return false;
+  }
+  async deleteComment() {
+    return false;
   }
 }
 
